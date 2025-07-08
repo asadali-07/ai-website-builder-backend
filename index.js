@@ -21,7 +21,13 @@ if (!GOOGLE_AI_API_KEY) {
 
 const ai = new GoogleGenAI({ apiKey: GOOGLE_AI_API_KEY });
 
-app.use(cors());
+// Allow specific origin with credentials (optional)
+app.use(cors({
+  origin: 'https://aximo-ai.netlify.app',
+  methods: ['GET', 'POST', 'OPTIONS'],
+  credentials: true
+}));
+
 app.use(express.json());
 
 const __filename = fileURLToPath(import.meta.url);
