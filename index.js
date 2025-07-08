@@ -132,66 +132,108 @@ app.post("/publish", async (req, res) => {
       }
     }
 
-    // Step 3: Wait for deployment to complete
+    // Step 3: Wait for deployment to complete with improved timeout handling
+    const maxAttempts = process.env.NETLIFY_MAX_POLLING_ATTEMPTS || 15;
+    const pollingInterval = process.env.NETLIFY_POLLING_INTERVAL || 2000;
+    const maxWaitTime = process.env.NETLIFY_MAX_WAIT_TIME || 60000; // 1 minute max wait
+    
     let deployStatus = 'uploading';
     let attempts = 0;
-    const maxAttempts = 30;
+    const startTime = Date.now();
+    let statusResponse;
+    let url = null;
 
-    while ((deployStatus === 'uploading' || deployStatus === 'building') && attempts < maxAttempts) {
-      await new Promise(resolve => setTimeout(resolve, 2000));
+    try {
+      while (attempts < maxAttempts && Date.now() - startTime < maxWaitTime) {
+        await new Promise(resolve => setTimeout(resolve, pollingInterval));
+        
+        statusResponse = await axios.get(
+          `https://api.netlify.com/api/v1/deploys/${deployId}`,
+          {
+            headers: {
+              Authorization: `Bearer ${NETLIFY_AUTH_TOKEN}`,
+            },
+          }
+        );
+        
+        deployStatus = statusResponse.data.state;
+        url = statusResponse.data.ssl_url || statusResponse.data.url;
+        attempts++;
+        
+        console.log(`🔄 Deploy status: ${deployStatus} (${attempts}/${maxAttempts})`);
+        
+        if (deployStatus === 'ready') {
+          break;
+        }
+      }
+
+      // Even if not ready, get the latest URL
+      if (!url && statusResponse) {
+        url = statusResponse.data.ssl_url || statusResponse.data.url;
+      }
+
+      // If URL is still not available, make one more attempt to get it
+      if (!url) {
+        const finalCheck = await axios.get(
+          `https://api.netlify.com/api/v1/deploys/${deployId}`,
+          {
+            headers: {
+              Authorization: `Bearer ${NETLIFY_AUTH_TOKEN}`,
+            },
+          }
+        );
+        url = finalCheck.data.ssl_url || finalCheck.data.url;
+      }
+
+      // Check if site's publish URL is available through the site API if needed
+      if (!url) {
+        const siteInfo = await axios.get(
+          `https://api.netlify.com/api/v1/sites/${NETLIFY_SITE_ID}`,
+          {
+            headers: {
+              Authorization: `Bearer ${NETLIFY_AUTH_TOKEN}`,
+            },
+          }
+        );
+        url = siteInfo.data.ssl_url || siteInfo.data.url;
+      }
+
+      if (deployStatus === 'ready') {
+        console.log("✅ Site deployed successfully:", url);
+
+        res.json({
+          url,
+          message: "✅ Website published successfully!",
+          deployId: deployId,
+          status: deployStatus
+        });
+      } else {
+        console.log("⚠️ Site deployment in progress:", url);
+
+        // Treat as success but with a warning
+        res.json({
+          url,
+          message: "🔄 Website is being deployed! Your site will be available at this URL shortly.",
+          deployId: deployId,
+          status: "in_progress",
+          details: "Deployment initiated successfully but still processing on Netlify's servers."
+        });
+      }
+    } catch (pollingErr) {
+      console.error("❌ Error while polling deploy status:", pollingErr);
       
-      const statusResponse = await axios.get(
-        `https://api.netlify.com/api/v1/deploys/${deployId}`,
-        {
-          headers: {
-            Authorization: `Bearer ${NETLIFY_AUTH_TOKEN}`,
-          },
-        }
-      );
-      
-      deployStatus = statusResponse.data.state;
-      attempts++;
-      console.log(`🔄 Deploy status: ${deployStatus} (${attempts}/${maxAttempts})`);
-    }
-
-    if (deployStatus === 'ready') {
-      const finalResponse = await axios.get(
-        `https://api.netlify.com/api/v1/deploys/${deployId}`,
-        {
-          headers: {
-            Authorization: `Bearer ${NETLIFY_AUTH_TOKEN}`,
-          },
-        }
-      );
-
-      const url = finalResponse.data.ssl_url || finalResponse.data.url;
-      console.log("✅ Site deployed successfully:", url);
-
-      res.json({
-        url,
-        message: "✅ Website published successfully!",
-        deployId: deployId,
-        status: deployStatus
-      });
-    } else {
-      const currentResponse = await axios.get(
-        `https://api.netlify.com/api/v1/deploys/${deployId}`,
-        {
-          headers: {
-            Authorization: `Bearer ${NETLIFY_AUTH_TOKEN}`,
-          },
-        }
-      );
-
-      const url = currentResponse.data.ssl_url || currentResponse.data.url;
-      console.log("⚠️ Site deployment in progress:", url);
-
-      res.json({
-        url,
-        message: "🔄 Website deployment started! It may take a few moments to be fully available.",
-        deployId: deployId,
-        status: deployStatus
-      });
+      // Still return success with the deployId if we have a URL
+      if (url) {
+        res.json({
+          url,
+          message: "🔄 Website deployment initiated! It may take a few moments to be fully available.",
+          deployId: deployId,
+          status: "unknown",
+          details: "Status checking failed, but deployment was started successfully."
+        });
+      } else {
+        throw pollingErr; // Re-throw to be caught by the outer catch
+      }
     }
 
   } catch (err) {
@@ -209,6 +251,7 @@ app.post("/publish", async (req, res) => {
     });
   }
 });
+
 
 // Get deployment status endpoint
 app.get("/deploy-status/:deployId", async (req, res) => {
