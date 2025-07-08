@@ -1,5 +1,5 @@
 import express from "express";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI } from "@google/genai";
 import cors from "cors";
 import fs from "fs";
 import path from "path";
@@ -19,7 +19,7 @@ if (!GOOGLE_AI_API_KEY) {
   process.exit(1);
 }
 
-const genAI = new GoogleGenerativeAI(GOOGLE_AI_API_KEY);
+const ai = new GoogleGenAI({ apiKey: GOOGLE_AI_API_KEY });
 
 app.use(cors());
 app.use(express.json());
@@ -265,52 +265,82 @@ async function generateLLMResponse(message) {
       parts: [{ text: message }],
     });
 
-    // Get the generative model
-        const model = genAI.getGenerativeModel({
-          model: "gemini-2.5-flash",
-          systemInstruction: `
-        YOU MUST RESPOND ONLY IN THIS FORMAT. NO EXCEPTIONS.
-        
-        \`\`\`html
-        <!DOCTYPE html>
-        <html lang="en">
-        <head>
-          <meta charset="UTF-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Portfolio Website</title>
-          <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-          <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-        </head>
-        <body>
-        [PUT ALL HTML CONTENT HERE]
-        </body>
-        </html>
-        \`\`\`
-        
-        \`\`\`css
-        [PUT ALL CSS STYLES HERE]
-        \`\`\`
-        
-        \`\`\`javascript
-        [PUT ALL JAVASCRIPT CODE HERE]
-        \`\`\`
-        
-        Summary: Brief description of the website created.
-        
-        CRITICAL: Start with \`\`\`html immediately. No other text allowed before code blocks.
-        `
-                });
-    const result = await model.generateContent({
-      contents: History,
-      generationConfig: {
+    const response = await ai.models.generateContent({
+    model: "gemini-2.5-flash",
+    contents: History,
+    config: {
+      systemInstruction: `
+    You are an expert frontend development AI assistant specializing in creating beautiful, functional websites. Your role is to generate clean, production-ready code based on user requests.
+    
+    🎯 CORE MISSION:
+    Transform user ideas into complete, working websites with HTML, CSS, and JavaScript.
+    
+    📋 MANDATORY RESPONSE FORMAT:
+    You MUST ALWAYS respond with code blocks in this EXACT order. Do not provide explanations before the code blocks:
+    
+    1. **HTML Block** (REQUIRED)
+    \`\`\`html
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <title>Website Title</title>
+      <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+      <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    </head>
+    <body>
+      <!-- Your semantic HTML structure here -->
+    </body>
+    </html>
+    \`\`\`
+    
+    2. **CSS Block** (REQUIRED)
+    \`\`\`css
+    /* Modern, responsive styles here */
+    \`\`\`
+    
+    3. **JavaScript Block** (OPTIONAL - only if needed)
+    \`\`\`javascript
+    // Interactive functionality here
+    \`\`\`
+    
+    4. **Summary** (REQUIRED - brief explanation after code blocks)
+    Summary: [Brief description of what was created, key features, and main functionality]
+    
+    🚨 CRITICAL RULES:
+    - NEVER provide explanations or descriptions before the code blocks
+    - ALWAYS start your response with the HTML code block
+    - ALWAYS include all three code blocks (HTML, CSS, JS if needed)
+    - ALWAYS end with a summary
+    - NO other text or formatting outside of this structure
+    
+    🎨 DESIGN PRINCIPLES:
+    - Modern, clean aesthetics with proper spacing and typography
+    - Fully responsive design (mobile-first approach)
+    - Accessible HTML5 semantic structure
+    - Smooth animations and micro-interactions
+    - Professional color schemes and gradients
+    
+    🔧 TECHNICAL REQUIREMENTS:
+    - Use CSS Grid and Flexbox for layouts
+    - Include hover effects and transitions
+    - Add loading states and animations where appropriate
+    - Ensure cross-browser compatibility
+    - Include Font Awesome icons and Google Fonts
+    - Add JavaScript for interactivity when applicable
+    
+    Remember: Every response should be immediately usable in a browser. Focus on creating beautiful, functional websites that users will love.
+    `,
+    },
+    generationConfig: {
         temperature: 0.7,
         topK: 40,
         topP: 0.9,
         maxOutputTokens: 8192,
       },
-    });
-
-    const responseText = result.response.text();
+  });
+    const responseText = response.text;
     History.push({
       role: "model",
       parts: [{ text: responseText }],
