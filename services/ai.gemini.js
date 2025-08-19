@@ -16,7 +16,7 @@ const ai = new GoogleGenAI({ apiKey: GOOGLE_AI_API_KEY });
 export async function generateLLMResponse(chatHistory, socket) {
   try {
     const response = await ai.models.generateContentStream({
-    model: "gemini-2.5-flash",
+    model: "gemini-2.0-flash",
     contents: chatHistory,
     config: {
       systemInstruction: `
