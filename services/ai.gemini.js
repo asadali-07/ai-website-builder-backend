@@ -1,22 +1,13 @@
 import { GoogleGenAI } from "@google/genai";
 import dotenv from 'dotenv';
-
 dotenv.config();
 
-const GOOGLE_AI_API_KEY = process.env.GOOGLE_AI_API_KEY;
-
-// Check required environment variables
-if (!GOOGLE_AI_API_KEY) {
-  console.error("❌ Missing required environment variable: GOOGLE_AI_API_KEY");
-}
-
-const ai = new GoogleGenAI({ apiKey: GOOGLE_AI_API_KEY });
-
+const ai = new GoogleGenAI({ apiKey:process.env.GOOGLE_API_KEY});
 
 export async function generateLLMResponse(chatHistory, socket) {
   try {
-    const response = await ai.models.generateContentStream({
-    model: "gemini-2.0-flash",
+    const response = await ai.models.generateContent({
+    model: "gemini-2.5-flash",
     contents: chatHistory,
     config: {
       systemInstruction: `
@@ -26,44 +17,36 @@ export async function generateLLMResponse(chatHistory, socket) {
     Transform user ideas into complete, working websites with HTML, CSS, and JavaScript.
     
     📋 MANDATORY RESPONSE FORMAT:
-    You MUST ALWAYS respond with code blocks in this EXACT order. Do not provide explanations before the code blocks:
+    You MUST ALWAYS respond with a JSON object wrapped in a code block. This is the EXACT format required:
     
-    1. **HTML Block** (REQUIRED)
-    \`\`\`html
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-      <meta charset="UTF-8" />
-      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-      <title>Website Title</title>
-      <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-      <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    </head>
-    <body>
-      <!-- Your semantic HTML structure here -->
-    </body>
-    </html>
+    \`\`\`json
+    {
+      "index.html": {
+        "name": "index.html",
+        "language": "html",
+        "value": "<!DOCTYPE html>\\n<html lang=\\"en\\">\\n<head>\\n  <meta charset=\\"UTF-8\\" />\\n  <meta name=\\"viewport\\" content=\\"width=device-width, initial-scale=1.0\\" />\\n  <title>Website Title</title>\\n  <link href=\\"https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap\\" rel=\\"stylesheet\\">\\n  <link rel=\\"stylesheet\\" href=\\"https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css\\">\\n</head>\\n<body>\\n  <!-- Your semantic HTML structure here -->\\n</body>\\n</html>"
+      },
+      "style.css": {
+        "name": "style.css",
+        "language": "css",
+        "value": "/* Modern, responsive styles here */"
+      },
+      "script.js": {
+        "name": "script.js",
+        "language": "javascript",
+        "value": "// Interactive functionality here (leave empty if not needed)"
+      }
+    }
     \`\`\`
-    
-    2. **CSS Block** (REQUIRED)
-    \`\`\`css
-    /* Modern, responsive styles here */
-    \`\`\`
-    
-    3. **JavaScript Block** (OPTIONAL - only if needed)
-    \`\`\`javascript
-    // Interactive functionality here
-    \`\`\`
-    
-    4. **Summary** (REQUIRED - brief explanation after code blocks)
-    Summary: [Brief description of what was created, key features, and main functionality]
     
     🚨 CRITICAL RULES:
-    - NEVER provide explanations or descriptions before the code blocks
-    - ALWAYS start your response with the HTML code block
-    - ALWAYS include all three code blocks (HTML, CSS, JS if needed)
-    - ALWAYS end with a summary
-    - NO other text or formatting outside of this structure
+    - ALWAYS respond with ONLY the JSON code block format shown above
+    - The "value" field must contain the ENTIRE code as a single string with \\n for newlines
+    - Properly escape quotes in the JSON (use \\" for quotes inside strings)
+    - Include all three files: index.html, style.css, and script.js
+    - If JavaScript is not needed, include an empty string or minimal comment
+    - DO NOT add any text before or after the JSON code block
+    - DO NOT provide explanations or summaries outside the JSON
     
     🎨 DESIGN PRINCIPLES:
     - Modern, clean aesthetics with proper spacing and typography
@@ -79,33 +62,26 @@ export async function generateLLMResponse(chatHistory, socket) {
     - Ensure cross-browser compatibility
     - Include Font Awesome icons and Google Fonts
     - Add JavaScript for interactivity when applicable
+    - For images use unsplash, pinterest, or similar platforms (ensure URLs work)
 
-    Remember: Every response should be immediately usable in a browser. Focus on creating beautiful, functional websites that users will love. For images use unsplash, pinterest, or similar platforms and image should be working properly.
+    Remember: Every response must be a valid JSON object that can be parsed. The HTML, CSS, and JS code should be production-ready and immediately usable in a browser.
     `,
     },
     generationConfig: {
         temperature: 0.7,
         topK: 40,
         topP: 0.9,
-        maxOutputTokens: 8192,
+        maxOutputTokens: 2048,
       },
   });
-  let fullText = "";
 
-    for await (const chunk of response) {
-      const text = chunk?.text || "";
-      if (text) {
-        fullText += text;
-        socket.emit("ai-message-chunk", text);
-      }
-    }
-    socket.emit("ai-message-complete", fullText);
+    ;
+    socket.emit("ai-message-complete", response.text);
     
-    return fullText;
+    return response.text;
 
   } catch (error) {
     console.error("Gemini API Error:", error);
-    throw new Error(`Google AI API Error: ${error.message}`);
   }
 }
 
@@ -135,6 +111,5 @@ that result in beautiful, functional, production-ready websites.
     return response.text;
   } catch (error) {
     console.error("Prompt Enhancer Error:", error);
-    throw new Error(`Prompt Enhancer API Error: ${error.message}`);
   }
 }
