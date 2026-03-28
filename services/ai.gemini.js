@@ -4,11 +4,11 @@ dotenv.config();
 
 const ai = new GoogleGenAI({ apiKey:process.env.GOOGLE_API_KEY});
 
-export async function generateLLMResponse(chatHistory, socket) {
+export async function generateLLMResponse(enhancedPrompt) {
   try {
     const response = await ai.models.generateContent({
     model: "gemini-2.5-flash",
-    contents: chatHistory,
+    contents: enhancedPrompt,
     config: {
       systemInstruction: `
     You are an expert frontend development AI assistant specializing in creating beautiful, functional websites. Your role is to generate clean, production-ready code based on user requests.
@@ -75,9 +75,6 @@ export async function generateLLMResponse(chatHistory, socket) {
       },
   });
 
-    ;
-    socket.emit("ai-message-complete", response.text);
-    
     return response.text;
 
   } catch (error) {
@@ -89,7 +86,7 @@ export async function promptEnhancer(rawPrompt) {
   try {
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
-      contents: [{ role: "user", parts: [{ text: rawPrompt }] }],
+      contents: rawPrompt,
       config: {
         systemInstruction: `
 You are an expert prompt enhancer AI assistant.
@@ -104,7 +101,7 @@ that result in beautiful, functional, production-ready websites.
         temperature: 0.7,
         topK: 40,
         topP: 0.9,
-        maxOutputTokens: 2048,
+        maxOutputTokens: 1024,
       },
     });
 
